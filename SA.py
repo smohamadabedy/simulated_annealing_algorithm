@@ -1,56 +1,97 @@
 import numpy as np
+import csv
+import json
 
-#optimization function 
-def cost(arg):
-    return (arg[0,0]+2*arg[0,1] - 7)**2 + (2*arg[0,0]+arg[0,1] - 5)**2
-# chose size of search space
-n = 2;
-# intial neighborhood radius vector 
-Delta = np.random.rand(1,n)
-# intial start point
-X0 = np.random.rand(1,n)
-# calc inital tempereture 
-T0 = 300
-# probabilty of uphill move
-Pn = lambda f2,f1,Tk : np.exp(-np.divide(np.subtract(f2,f1),Tk))
-# number of iteration
-maxit = 600
-# default move
-move = 0
-for i in range(1,maxit):
-    # candidate point and previous point at each iterations
-    prevPoint = X0
-    r         = (Delta*np.random.uniform(low=-1, high=1, size=(1,n)))
-    newPoint  = X0 + r
-    # calc new points
-    prevF = cost(prevPoint)
-    newF  = cost(newPoint)
-    # SA creteria
-    if(newF < prevF):
-        X0 = newPoint
-        move = 1
-    else:
-        prob  = Pn(newF,prevF,T0)
-        randv = np.random.rand(1)
-        cond  = randv < prob
-        if(cond):
-            X0 = newPoint
-            move = 1
-        else:
-            move = 0
-            
-    # summery
-    # print(i,':',T0,prevPoint,r,prevF,newPoint,newF,prob,randv,cond)
-    # update temp       
-    if(move == 1):
-        T0 = .95*T0
-    # check creteria
-    if(T0 < .05):
-        break;
+# Define your cost function (example: Himmelblau function)
+# https://en.wikipedia.org/wiki/Himmelblau%27s_function
+def cost(x):
+    return (x[0] +  x[1]**2 - 7) ** 2 + (x[0]**2 + x[1] -11) ** 2
+
+# Problem dimension (can be any positive integer)
+n               = 2
+
+# Initial temperature
+T               = 300.0
+
+# Temperature update rate
+cooling_rate    = 0.95
+
+# Minimum temperature (stopping criterion)
+T_min           = 0.05
+
+# Maximum iterations
+max_iter        = 1000
+
+# Initial solution (random point in [0,1]^n)
+x               = np.random.rand(n)
+
+# Initial neighborhood step size
+delta           = np.random.rand(n)
+
+# History list to store logs: each entry is a dict
+history         = []
+
+# Simulated Annealing main loop
+for iteration in range(max_iter):
+    # Generate a new candidate solution
+    r               = delta * np.random.uniform(-1, 1, size=n)
+    x_new           = x + r
+
+    # Evaluate cost at current and new positions
+    f_current       = cost(x)
+    f_new           = cost(x_new)
+
+    # Accept new point if better, or with probability if worse
+    accepted        = False
+    if f_new < f_current or np.random.rand() < np.exp(-(f_new - f_current) / T):
+        x           = x_new
+        T           *= cooling_rate  # Cool down only when move accepted
+        accepted    = True
         
-        
-        
-print('<=================================>')
-print(X0)
-print(cost(X0))
-print('iteration: ',i,'/',maxit)
+    
+     # Log details for this iteration
+    history.append({
+        'iteration': iteration,
+        'temperature': T,
+        'current_cost': f_current,
+        'candidate_cost': f_new,
+        'accepted': accepted,
+        'x': x.copy().tolist(),
+        'step': r.copy().tolist()
+    })
+    
+    print(f"Iter {iteration:4d} | T={T:7.4f} | f(x)={f_current:10.6f} | f(new)={f_new:10.6f} "
+          f"| {'ACCEPTED' if accepted else 'REJECTED'} | x={x}")
+    
+    # Check stopping criterion
+    if T < T_min:
+        break
+
+# Final result
+print("Best solution found:", x)
+print("Cost at best solution:", cost(x))
+
+
+# Save to JSON
+with open("history.json", "w") as f_json:
+    json.dump(history, f_json, indent=2)
+
+# Save to CSV (flatten nested lists)
+with open("history.csv", "w", newline="") as f_csv:
+    fieldnames = ['iteration', 'temperature', 'current_cost', 'candidate_cost', 'accepted'] + \
+                 [f'x_{i}' for i in range(n)] + [f'step_{i}' for i in range(n)]
+    writer = csv.DictWriter(f_csv, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for h in history:
+        flat_entry = {
+            'iteration': h['iteration'],
+            'temperature': h['temperature'],
+            'current_cost': h['current_cost'],
+            'candidate_cost': h['candidate_cost'],
+            'accepted': h['accepted']
+        }
+        for i in range(n):
+            flat_entry[f'x_{i}'] = h['x'][i]
+            flat_entry[f'step_{i}'] = h['step'][i]
+        writer.writerow(flat_entry)
